@@ -1,0 +1,148 @@
+<HR>
+<P>
+Application: jdresolve 0.6.1<BR>
+     Author: <A HREF="mailto:me@jdrowell.com">John D. Rowell</A><BR>
+   Homepage: <A HREF="http://www.jdrowell.com/Linux/Projects/jdresolve">http://www.jdrowell.com/Linux/Projects/jdresolve</A>
+</P>
+<HR>
+
+<P><B>FOR THE IMPATIENT</B></P>
+
+<P>
+./configure<BR>
+make install<BR>
+&nbsp;<BR>
+Try: jdresolve &lt;log file&gt; &gt; &lt;resolved file&gt;<BR>
+i.e. jdresolve access_log &gt; resolved.log
+</P>
+
+<P>To use recursion, just use the "-r" command line option.</P>
+
+<P><B>DESCRIPTION</B></P>
+
+<P>
+jdresolve resolves IP addresses to hostnames. Any file format is supported, including those where the line does not begin with the IP address. One of the strongest features of the program is the support for recursion, which can drastically reduce the number of unresolved hosts by faking a hostname based on the network that the IP belongs to. DNS queries are sent in parallel, which means that you can decrease run time by increasing the number of simultaneous sockets used (given a fast enough machine and available bandwidth). By using the database support, performance can be increased even further, by using cached data from previous runs.
+</P>
+
+<P><B>HOW IT USED TO WORK</B></P>
+
+<P>jdresolve used the algorithms describe below up to version 0.2.</P>
+
+<P>
+The initial version of jdresolve tried to only speed up the name resolution by implementing numerous concurrent requests. I The first problem was: how to resolve the maximum possible number of IPs concurrently without reading the whole log file into memory (they can get quite _huge_)? I figured I'd need a 2 pass approach, collecting all distinct host IPs that needing resolving in the first step, then resolving them efficiently inside a loop, and finally just replacing the resolved IPs on the second pass through the log file.
+</P>
+
+<P>
+This way we can garantee that the resolve queue will always be full with no need to weight that against how many lines of buffered log entries we would need to cache. The number of distinct IP addresses tend to be quite lower than the number of lines in the log file, and the IP part takes about only 1/20th of the log line, so we can't be using too much memory just by putting a few hundred or thousand small strings into a hash.
+</P>
+
+<P>
+After looking thru <A HREF="http://www.cpan.org/">CPAN</A>, I came across the excellent Net::DNS module and was more than happy to note that it already provide a subroutine and examples for background queries. Just add IO::Select to that and you have a full non-blocking aproach to multiple concurrent queries. You can even specify the timeouts to make the name resolving even more efficient.
+</P>
+
+<P>
+Having this much done, I was quite happy to have the fastest log resolving routine I have come accross. By setting the numbers of concurrent sockets and timeouts you could fine tune the beast to resolve names _very_ rapidly. But still there where about 25% of the IPs left unresolved...
+</P>
+
+<P>
+"This is not much help", I thought. I need to know _at least_ from what country these people are accessing from. After a few not very scientifical aproaches, I realized that by recurring thru the DNS classes (C, B and finally A) and checking for the host listed in the SOA record I could be pretty sure this was a father domain to the IP.  The implementation goes like this: find out all distinct IP addresses, then determine which C, B and A classes contain these addresses. Make up a list from these queries and send them thru a resolver in chuncks of 32 (configurable via the command line). If a socket times out, leave that request unresolved.
+</P>
+
+<P>
+After running a big log file against the recursive aproach, I determined it didn't take much longer to resolve it at all. Full class domains tend to have decently configured DNS servers, and you get a lot of repeated classes when resolving your logs. The best was still to come: 0 unresolved IPs :) And since that I haven't found an IP that can't be determined at least to it's A class. 
+</P>
+
+<P><B>HOW IT WORKS NOW</B></P>
+
+<P>
+The above algorithm works extremely well except for the case of very large logs (>100Mb). The hashes containing IPs and their parent A/B/C classes gets pretty huge doesn't fit in memory any more.
+</P>
+
+<P>
+So as of v0.3, we have a new 1 pass approach. We have a line cache that holds 10000 lines (configurable with -l, don't set it much lower). Using my test base it looks like each 10000 lines take about 4Mb of RAM during processing (that's the log lines themselves plus the hashes and arrays used for caching/processing). Each IP and class to be resolved has a count value, which is increased every time a line with that number is read, and decreased after we print out a resolved line with that reference value.
+</P>
+
+<P>
+Think of it as a "moving window" method, and that we do our own garbage collection. The process pauses if the first line in our line cache is still unresolved, we don't have any more sockets, or we're waiting for socket data. We can't control the last two items, but to minimize the pauses do to yet unresolved lines, increase the -l value if you notice pauses during resolving. There should be enough lines cached so that even if we have timeouts on sockets we are still waiting for other socket data to come in, not just for 1 single socket to time out.
+</P>
+
+<P>
+Using this method the memory usage during executing is almost constant.  So you can determine how much RAM you wish to use for resolving names and set your -l value and forget about it. There's really no performance loss when compared to the &lt;=v0.2 algorithm if you have a big enough line cache.
+<P>
+
+<P><B>HOW TO USE IT</B></P>
+
+<P>
+Example: jdresolve access_log &gt; resolved.log
+</P>
+
+<P>
+If you simply run the script as you would with the Apache logresolve program, you get the same results, only much faster. But if you want really take advantage of jdresolve, you should at least turn on the -r option for recursive resolves. As of version 0.2, the -m option takes a mask as an argument. The valid substitutions are %i for the IP address and %c for the resolved class. So an IP like 1.2.3.4 with a mask of "%i.%c" (the default) would become something like "1.2.3.4.some.domain".  A mask of "somewhere.in.%c" would turn it into "somewhere.in.some.domain".
+</P>
+
+<P>
+The -h switch shows you basic help information. The -v switch will display version information. Use -d 1 or -d 2 (more verbose) to debug the resolving process and get extra statistics. If you don't care for the default statistics, use -n to disable them.
+</P>
+
+<P>
+After some runs you may want to change your timeout value. The -t option accepts a new value in seconds. For even better performance, use the -s switch with a value greater then 32, but remember that many operating systems have a hard coded default for open files of 256 or 1024. Check your system's limit with "ulimit -a".
+</P>
+
+<P>
+New in v0.3 is the -l switch, which specified how many lines we will cache for resolving. The default is 10000, but can be vastly incremented without using too much RAM, as explained in "HOW IT WORKS".
+</P>
+
+<P>
+After you used jdresolve on the log file, you can check which ips where left unresolved by using the --unresolved option on the file that was generated.
+</P>
+
+<P><B>WHAT DOES RHOST DO?</B></P>
+
+<P>
+'rhost' is a quick script to take advantage of the new STDIN functionality of jdresolve. Many times you use the 'host' command to resolve a single IP (like 'host 200.246.224.10'). As with standard log resolvers, 'host' doesn't do recursion. So 'rhost' just calls jdresolve with the apropriate parameters to resolve that single IP number. The syntax is 'rhost &lt;ip&gt;'.
+</P>
+
+<P><B>DATABASE SUPPORT</B></P>
+
+<P>
+As of version 0.5, jdresolve provides simple database support thru db (dbm, gdbm, sdbm, etc) files. You can use the --database switch to specify the db file and that will allow for fallback in case some DNS servers are down and also performance improvements since you can lower your timeout value without sacrificing resolved percentage.
+</P>
+
+<P>
+To use the database support, just supply a database name (i.e.  'hosts.db') using the --database option. If it does not yet exist, a new database with that name will be created. All resolved hosts and classes during a jdresolve run will be cached to the database.
+</P>
+
+<P>
+After you have some data in a db, you can use --dumpdb to look at it.  With --mergedb to add new information to it (the format of the input file is the same as the one from a dump using --dumpdb, e.g. an ip/class followed by the hostname/classname, separated by white space)
+</P>
+
+<P>
+Ex: echo "0.0.0.0 testip" | jdresolve --database hosts.db --mergedb -<BR>
+    ...adds and IP entry to the db<BR>
+Ex: echo "0.0.0 classname" | jdresolve --database hosts.db --mergedb -<BR>
+    ...adds a class entry to the db
+</P>
+
+<P>
+Note: Since when recursing the resolved hostnames are stored to the database (even when resolved by recursion), you _may_ not want to use the same database for normal and recursed runs. That is because a cached host from a resolved run will show up as a "real" IP if you don't recurse and use the --dbfirst or --dbonly options, or just use the database and the lookup times out. Nothing too serious, but this detail may be important to some people.
+</P>
+
+<P><B>SOME NOTES ON NET::DNS</B></P>
+
+<P>
+It seems that Net::DNS can perform suboptimally on non-Linux machines, even on *BSD (this is based on some bug reports I got from people using jdresolve in those environments). Also, on Windows NT (yes, some people still use that), you should make sure there is a 'resolv.conf' file somewhere (I'm no NT expert, read the docs). Since we use so little of the functionality of Net::DNS, I may replace it with standard sockets some time in the future. It is still a very very nice module though :)
+</P>
+
+<P><B>SUPPORT</B></P>
+
+<P>
+If you have dificulties using this program or would like to request a new feature, feel free to reach me at me@jdrowell.com.
+</P>
+
+<P><B>LICENSING</B></P>
+
+<P>
+jdresolve is licensed under the GPL. See the COPYING file for details.
+</P>
+
+

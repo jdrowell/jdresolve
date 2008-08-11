@@ -1,0 +1,100 @@
+#!/bin/sh
+
+### Check for Perl
+
+echo -n "checking for Perl... "
+
+PERL=""
+PERLVERSION="0"
+
+for i in [ /usr/bin/perl /usr/local/bin/perl /bin/perl ]; do
+	if test -x $i; then
+		PERL=$i
+		PERLVERSION=`$PERL -e "print $]" 2>&1`
+		echo "found $PERLVERSION ($PERL)"
+		break
+	fi
+done;
+
+if [ "$PERL" == "" ]; then
+	echo "missing"
+	echo "You can get Perl at http://www.perl.org"
+	exit
+fi
+
+if [ "$PERLVERSION" \<  "5.00400" ]; then
+	echo "We need Perl >= 5.004. You can get Perl at http://www.perl.org"
+	exit
+fi
+
+### Check for Net::DNS
+
+echo -n "checking for Net::DNS... "
+
+NETDNS=""
+NETDNSVERSION="0"
+
+INC=`$PERL -e "print join(' ', @INC)"`
+for i in $INC; do
+	i=$i/Net/DNS.pm
+	if test -f $i; then
+		NETDNS=$i
+		NETDNSVERSION=`$PERL -e "use Net::DNS;print Net::DNS->version" 2>&1`
+		echo "found $NETDNSVERSION ($NETDNS)"
+		break
+	fi
+done;
+
+if [ "$NETDNS" == "" ]; then
+	echo "missing"
+	echo "You can get Net::DNS at http://www.cpan.org"
+	exit
+fi
+
+if [ "$NETDNSVERSION" \<  "0.12" ]; then
+	echo "We need Net::DNS >= 0.12. You can get Net::DNS at http://www.cpan.org"
+	exit
+fi
+
+### Check for install
+
+echo -n "checking for install... "
+
+INSTALL=""
+INSTALLVERSION=""
+
+for i in [ /usr/bin/install /usr/local/bin/install /bin/install ]; do
+	if test -x $i; then
+		INSTALL=$i
+		INSTALLVERSION=`install --version | head -n 1 | sed -e "s/[^0-9]*\([0-9]*\.[0-9]*[a-z]*\)$/\1/" 2>&1 `
+		echo "found $INSTALLVERSION ($INSTALL)"
+		break
+	fi
+done;
+
+if [ "$INSTALL" == "" ]; then
+	echo "missing"
+	echo "You can get install from the fileutils package at ftp://ftp.gnu.org"
+	exit
+fi
+
+if [ "$INSTALLVERSION" \<  "3.0" ]; then
+	echo "We need install >= 3.0. You can get install from the fileutils package at ftp://ftp.gnu.org"
+	exit
+fi
+
+### Create the output files
+
+echo "creating Makefile"
+
+cp Makefile.in Makefile
+
+echo "creating jdresolve"
+
+sed -e "s|^#\!/usr/bin/perl|#\!$PERL|" < jdresolve.in > jdresolve
+chmod 755 jdresolve
+
+echo ""
+
+echo "Done. Type \"make install\" to install jdresolve."
+

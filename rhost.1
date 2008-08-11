@@ -1,0 +1,46 @@
+.TH RHOST 1
+.\" NAME should be all caps, SECTION should be 1-8, maybe w/ subsection
+.\" other parms are allowed: see man(7), man(1)
+
+.SH "NAME"
+rhost \- resolve a single ip address
+
+.SH "SYNOPSIS"
+.B rhost 
+<IP> [ARGS...]
+
+.SH "DESCRIPTION"
+.PP
+.B rhost
+uses 
+.B jdresolve
+to resolve a single IP address
+
+.SH "OPTIONS"
+.TP
+.B <IP>
+the address to resolve.
+.TP
+.B [ARGS...]
+up to 3 optional arguments to pass to 
+.B jdresolve
+\.
+
+.SH "SEE ALSO"
+.BR jdresolve (1).
+.SH "AUTHOR"
+jdresolve was written by John Douglas Rowell <me@jdrowell.com>, and
+is licensed under the terms of the GNU General Public License.
+
+This man page was written by Craig Sanders <cas@taz.net.au>, for the
+Debian GNU/Linux package of jdresolve, and is also licensed under the
+terms of the GNU GPL.
+.SH "BUG REPORTS"
+If you find a bug in
+.B jdresolve,
+you should report it.  But first, you should make sure that it really is
+a bug, and that it appears in the latest version of
+.B jdresolve
+that you have.
+Once you have determined that a bug actually exists, send a bug report
+to \fIbugs@jdrowell.com\fP.  

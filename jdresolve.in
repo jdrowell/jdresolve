@@ -1,0 +1,1032 @@
+#!/usr/bin/perl -w
+
+# jdresolve - Resolves IP addresses into hostnames 
+#
+# Copyright (c) 1999-2000 John D. Rowell
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 2 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+=head1 NAME
+
+jdresolve - resolves IP addresses into hostnames
+
+=head1 SYNOPSIS
+
+B<jdresolve>  [-h]   [-v]   [-n]   [-r]   [-a]  [-d  <level>]  
+[-m   <mask>]   [-l  <line  cache>]  [-t  <timeout>]  [-p]
+[-s    <number   of   sockets>]   [--database=<db   path>] 
+<I<LOG FILE>>
+
+B<jdresolve>  [--help]  [--version] [--nostats] [--recursive]
+[--anywhere]       [--debug=<level>]       [--mask=<mask>] 
+[--linecache=<line cache>]           [--timeout=<timeout>] 
+[--sockets=<number of sockets>]     [--database=<db path>] 
+[--dbfirst]      [--dbonly]     [--dumpdb]     [--mergedb]
+[--expiredb=<hours>]      [--unresolved]      [--progress] 
+<I<LOG FILE>>
+
+=head1 DESCRIPTION
+
+B<jdresolve>  resolves  IP  addresses  to hostnames. Any file 
+format  is  supported, including those where the line does   
+not  begin  with  the  IP  address.  One  of the strongest       
+features  of  the program  is  the  support for recursion, 
+which  can  drastically  reduce  the  number of unresolved 
+hosts  by  faking a hostname based on the network that the 
+IP  belongs  to.  DNS  queries are sent in parallel, which
+means  that  you  can  decrease run time by increasing the
+number  of  simultaneous sockets used (given a fast enough
+machine and available bandwidth ).  By  using the database 
+support,  performance  can  be  increased even further, by  
+using cached data from previous runs.  
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-h, --help>
+
+produces a short help message
+
+=item B<-v, --version>
+
+display version information
+
+=item B<-n, --no-stats>
+
+don't display stats after processing
+
+=item B<-r, --recursive>
+
+recurse  into  C, B and A classes when there is no
+PTR (default is no recursion)
+
+=item B<-d, --debug=<debug-level>>
+
+debug  mode  -  no  file  output,  just statistics  
+during run (verbosity level range: 1-3)
+
+=item B<-t, --timeout=<seconds>>
+
+timeout   in  seconds  for  each  host  resolution
+(default is 30 seconds)
+
+=item B<-l, --line-cache=<lines>>
+
+numbers  of  lines  to cache in memory (default is
+10000
+
+=item B<-s, --sockets=<sockets>>
+
+maximum  number  of concurrent sockets (use ulimit 
+-a  to  check  the  max allowed for your operating
+system - defaults to 64)
+
+=item B<-m, --mask=<mask>>
+
+<mask>  accepts  %i for IP and %c for class owner,
+e.g.  "somewhere.in.%c"  or "%i.in.%c" (default is
+"%i.%c")
+
+=item B<-a, --anywhere>
+
+resolves  IPs  found  anywhere  on  a  line  (will       
+resolve all IPs if there is more than one)
+
+=item B<-p, --progress>
+
+prints  a  nice progress bar indicating the status
+of the resolve operations
+
+=item B<--database=<db path>>
+
+path to database that holds resolved hosts/classes
+
+=item B<--dbfirst>
+
+check  if we have resolved entries in the database
+before sending out DNS queries
+
+=item B<--dbonly>
+
+don't  send DNS queries, use only resolved data in 
+the database
+
+=item B<--dumpdb>
+
+dumps a database to STDOUT
+
+=item B<--mergedb>
+
+merges  resolved IP/classes from a file (or STDIN)
+with a database
+
+=item B<--expiredb=<hours>>
+
+expires  entries  in  the  database that are older 
+than <hours> hours
+
+=item B<--unresolved>
+
+won't  attempt  to  resolve  IPs, only lists those    
+that were not resolved
+
+=item B<<LOG FILE>>
+
+the log filename or '-' for STDIN
+
+=head1 EXAMPLES
+
+    jdresolve access_log > resolved_log 
+    jdresolve -r -s 128 access_log > resolved_log
+    jdresolve -r --database hosts.db access_log > res_log
+
+=head1 SEE ALSO
+
+rhost(1)
+
+=head1 AUTHOR
+
+B<jdresolve> was written by John D. Rowell <me@jdrowell.com>,
+and  is licensed under the terms of the GNU General Public 
+License.
+
+The original version of this man page was written by Craig
+Sanders   <cas@taz.net.au>,   for   the  Debian  GNU/Linux 
+package of jdresolve, and is also licensed under the terms 
+of the GNU GPL.
+
+=cut
+
+# Require variable declaration
+use strict;
+
+# Load the needed modules
+use Net::DNS; # installed separately
+use IO::Select; 
+use Getopt::Long; 
+use POSIX qw(strftime);
+use DB_File;
+#use GDBM_File;
+
+# Global constants
+my $APPNAME = 'jdresolve';
+my $VERSION = '0.6.1';
+my $AUTHOR = 'John D. Rowell';
+my $YEAR = '1999-2000';
+my $BUGS = 'bugs@jdrowell.com';
+
+# Defaults for command line options
+my %opts = ( stdin => 0, help => 0, version => 0, nostats => 0, recursive => 0, debug => 0, mask => '%i.%c', linecache => 10000, timeout => 30, sockets => 64, database => '', anywhere => 0, dbfirst => 0, dbonly => 0, dumpdb => 0, unresolved => 0, mergedb => 0, expiredb => -1, progress => 0);
+
+# Recognized command line options
+my %optctl = ( '' => \$opts{stdin},
+	'h' => \$opts{help},
+	'help' => \$opts{help},
+	'v' => \$opts{version},
+	'version' => \$opts{version},
+	'n' => \$opts{nostats},
+	'nostats' => \$opts{nostats},
+	'r' => \$opts{recursive},
+	'recursive' => \$opts{recursive},
+	'd' => \$opts{debug},
+	'debug' => \$opts{debug},
+	'm' => \$opts{mask},
+	'mask' => \$opts{mask},
+	'l' => \$opts{linecache},
+	'linecache' => \$opts{linecache},
+	't' => \$opts{timeout},
+	'timeout' => \$opts{timeout},
+	's' => \$opts{sockets},
+	'sockets' => \$opts{sockets},
+	'a' => \$opts{anywhere},
+	'anywhere' => \$opts{anywhere},
+	'p' => \$opts{progress},
+	'progress' => \$opts{progress},
+	'dbfirst' => \$opts{dbfirst},
+	'dbonly' => \$opts{dbonly},
+	'dumpdb' => \$opts{dumpdb},
+	'unresolved' => \$opts{unresolved},
+	'mergedb' => \$opts{mergedb},
+	'expiredb' => \$opts{expiredb},
+	'database' => \$opts{database} );
+# When changing %optctl, @optlst should be updated also
+my @optlst = ('', 'h', 'help', 'v', 'version', 'n', 'nostats', 'r', 'recursive', 'p', 'progress', 'd=i', 'debug=i', 'm=s', 'mask=s', 'l=i', 'linecache=i', 't=i', 'timeout=i', 's=i', 'sockets=i', 'database=s', 'a', 'anywhere', 'dbfirst', 'dbonly', 'dumpdb', 'unresolved', 'mergedb', 'expiredb=i');
+
+# Usage information
+my $usage =<<EOF;
+Usage: $APPNAME [-hvnrap] [--help] [--version] [--nostats] [--recursive] [--anywhere] [-d <level>] [--debug=<level>] [-m <mask>] [--mask=<mask>] [-l <line cache>] [--linecache=<line cache>] [-t <timeout>] [--timeout=<timeout>] [-s <number of sockets>] [--sockets=<number of sockets>] [--progress] [--dbfirst] [--dbonly] [--dumpdb] [--unresolved] [--mergedb] [--expiredb=<hours>] [--database=<db path>] <LOG FILE>
+
+Report bugs to $BUGS
+EOF
+
+# Version information
+my $version =<<EOF;
+$APPNAME $VERSION
+Copyright (C) $YEAR $AUTHOR
+$APPNAME comes with ABSOLUTELY NO WARRANTY.
+You may redistribute copies of $APPNAME
+under the terms of the GNU General Public License.
+For more information about these matters, see the file named COPYING.
+EOF
+
+# Parse the command line
+GetOptions(\%optctl, @optlst);
+
+if ($opts{help}) {
+	# User needs help? Print and exit
+	print <<EOF; 
+$version
+jdresolve resolves IP addresses to hostnames.
+
+$usage
+
+   --help or -h
+      help (this text).
+   --version or -v
+      display version information.
+   --nostats or -n
+      don't display stats after processing
+   --recursive or -r
+      recurse into C, B and A classes when there is no PTR.
+      default is no recursion
+   --anywhere or -a
+      resolve all addresses in file (not just those that start lines)
+   --progress or -p
+      prints  a  nice progress bar indicating the status of the 
+	  resolve operations
+   --debug=<level> or -d <level>
+      debug mode (no file output, just statistics during run).
+      verbosity level range: 1-2
+   --timeout=<timeout> or -t <timeout>
+      timeout in seconds (for each host resolution).
+      default is 30 seconds
+   --sockets=<sockets> or -s <sockets>
+      maximum number of concurrent sockets to use.
+      (use ulimit -a to check the max allowed for your operating system)
+      default is 64
+   --mask=<mask> or -m <mask>
+      <mask> accepts %i for IP and %c for class owner.
+      ex: "somewhere.in.%c" or "%i.in.%c"
+      default if "%i.%c"
+   --linecache=<lines> or -l <lines>
+      numbers of lines to cache in memory.
+      default is 10000
+   --unresolved
+      don't resolve anything, just dump the unresolved hosts to STDOUT
+   --database=<db path>
+      path to database that holds resolved hosts/classes
+   --dbfirst
+      check if we have a cached resolved host/class in the database
+      before sending a DNS query
+   --dbonly
+      don't send DNS queries, use only cached data in the database 
+   --dumpdb
+      dumps a database to STDOUT
+   --mergedb
+      merges input to a database
+   --expiredb=<hours>
+      expires database entries older than <hours> hours
+   <LOG FILE>
+      the log filename or '-' for STDIN
+
+EOF
+	exit;
+}
+
+if ($opts{version}) {
+	# Version requested, print and exit
+	print <<EOF;
+$version
+try $APPNAME --help for help
+EOF
+	exit;
+}
+
+if (!defined $ARGV[0] and !$opts{stdin} and !$opts{dumpdb} and $opts{expiredb} == -1) {
+	# No logfile or STDIN specified, print usage and exit
+	print <<EOF;
+$usage
+try $APPNAME --help for help
+
+You must specify a filename or '-' for STDIN
+EOF
+	exit;
+}
+
+if (($opts{dbfirst} or $opts{dbonly} or $opts{dumpdb} or $opts{mergedb} or $opts{expiredb} > -1) and !$opts{database}) {
+	print <<EOF;
+You must specify a database to use these options.
+EOF
+	exit;
+}
+
+$opts{dbonly} and $opts{dbfirst} = 1;
+
+# If debugging, don't buffer output
+$opts{debug} and $| = 1;
+
+# If STDIN is going to be used, name the file '-'
+my $filename = $opts{stdin} ? '-' : $ARGV[0];
+
+# Set our IP matching regexp depending on the command line options
+my $ipmask = $opts{anywhere} ? '(\d+)\.(\d+)\.(\d+)\.(\d+)' : '^(\d+)\.(\d+)\.(\d+)\.(\d+)';
+
+my $res = new Net::DNS::Resolver; # used for sending dns requests
+my $sel = new IO::Select; # controls the open sockets
+my %hosts; # stores hosts pending resolve
+my %class; # stores classes pending resolve
+my @q; # stores queries in order
+my %socks; # our sockets
+my @lines; # the line buffer (input)
+my %DB; # in case we're going to use a database
+my $progresschars = 0; # progress line characters
+my %stats = ( SENT => 0, RECEIVED => 0, BOGUS => 0, RESOLVED => 0, HRESOLVED => 0, TIMEOUT => 0, STARTTIME => time(), MAXTIME => 0, TOTTIME => 0, TOTLINES => 0, TOTHOSTS => 0); # holds run time statistics
+
+unless ($opts{dumpdb} or $opts{expiredb} > -1) {
+	# Check if the filename exists
+	$filename ne '-' and !-f $filename and die "can't find log file '$filename'";
+	# Try to open the file
+	open FILE, $filename or die "error trying to open log file '$filename'";
+}
+
+# If a database is used, try to open it and tie it to %DB
+$opts{database} ne '' and (tie(%DB, 'DB_File', $opts{database}) or die "can't open database '$opts{database}'");
+#$opts{database} ne '' and (tie(%DB, 'GDBM_File', $opts{database}, &GDBM_WRCREAT, 0644) or die "can't open database '$opts{database}'");
+
+$opts{dumpdb} and dumpdb(), exit;
+$opts{mergedb} and mergedb(), exit;
+$opts{expiredb} > -1 and expiredb(), exit;
+$opts{unresolved} and unresolved(), exit;
+
+# MAIN LOOP
+
+while (1) {
+	getlines(); # read lines from input log file
+	$#lines == -1 and last; # no lines after read? we're done!
+	makequeries(); # send async dns queries
+	checkresponse(); # check for dns responses
+	checktimeouts(); # check for dns timeouts
+	printresults(); # print whatever we have resolved
+}
+
+printstats(); # print the session stats before we leave
+
+# MAIN EXIT
+
+exit;
+
+# SUBROUTINES
+
+sub debug {
+	# debug(message, level)
+    # Prints debug messages
+	# message: any text message
+	# level: the minimun debug level to print the message
+	# RETURNS: 0 if no message printed
+	#          1 if message was printed
+
+	my ($message, $level) = @_;
+
+	$opts{debug} < $level and return 0;
+	
+	print STDERR time(), "--> $message\n";
+
+	return 1;
+}
+
+sub dumpdb {
+	# dumpdb()
+    # Dumps a database to STDOUT
+	# RETURNS: 1 (always)
+
+	my $i = 1;
+
+	for (%DB) {
+	    if ($i++ % 2) {
+			print "$_ "; 
+	    } else { 
+			print "$_\n"; 
+		}
+	}
+
+	return 1;
+}
+
+sub mergedb {
+	# mergedb()
+    # Merges a file containing IP/hostname pairs to a database
+	# RETURNS: 1 (always)
+
+	while (<FILE>) {
+	    my ($ipclass, $name) = split /\s+/;
+	    $DB{$ipclass} = join(' ', ($name, 'M', time()));
+	}
+
+	return 1;
+}
+
+sub expiredb {
+	# expiredb()
+    # Expires entries in the database
+	# RETURNS: 1 (always)
+
+	my $currtime = time();
+	my ($i, $t) = (0, 0);
+
+	for (keys %DB) {
+		my ($name, $type, $time) = dbread($_);
+		if ($currtime - $time > $opts{expiredb} * 3600) {
+			delete $DB{$_};
+			$i++;
+		} else {
+			$t++;
+		}
+	}
+
+	print STDERR "Expired $i database entries, $t left in the database\n";
+
+	return 1;
+}
+
+sub unresolved {
+	# unresolved()
+    # Dumps the unresolved IPs from a file
+	# RETURNS: 1 (always)
+
+	my %ips;
+
+	while (<FILE>) {
+	    !/$ipmask\s/ and next;
+	    my $ip = "$1.$2.$3.$4";
+	    exists $ips{$ip} and next;
+	
+	    $ips{$ip} = 1;
+	    print "$ip\n";
+	}
+
+	return 1;
+}
+
+sub dbread {
+	# dbread(key)
+    # Reads data from the database
+	# key: an IP address or class
+	# RETURNS: (name, type, time)    if lookup succeeds
+	#          (undef, undef, undef) if lookup failed
+
+	my $key = shift;
+	
+	!$opts{database} and return (undef, undef, undef);
+	!(exists $DB{$key}) and return (undef, undef, undef);
+	
+	my $fromdb = $DB{$key};
+
+	return split(/ /, $fromdb);
+}
+
+sub dbwrite {
+	# dbwrite(key, name, type)
+    # Writes data to the database
+	# key: an IP address or class
+	# name: the resolved name
+	# type: N = nameserver, R = recursed, M = manual
+	# RETURNS: 1 if using a DB
+	#          0 if not using a DB
+
+	my ($key, $name, $type) = @_;
+	
+	!$opts{database} and return 0;
+
+	# Don't write back stuff that came from the db
+	$type eq 'D' and return 1;
+	
+	$DB{$key} = join(' ', ($name, $type, time()));
+
+	return 1;
+}
+
+sub addhost {
+	# addhost(ip)
+    # Adds a host to the cache/queue
+	# ip: an IP address (x.y.z.k)
+	# RETURNS: 1 (always)
+
+	# Valid values for a {RESOLVED} field:
+	#   'p' - pending
+	#   'r' - pending recursion
+	#   'F' - failed
+	#   'D' - resolved from db
+	#   'N' - resolved from nameserver
+	#   'R' - resolved thru recursion
+
+	my $ip = shift;
+
+	debug("Adding host: $ip", 2);
+	
+	if (exists $hosts{$ip}) {
+		# Host already queued, just increment the reference count
+		$hosts{$ip}{COUNT}++; 
+	} else {
+		# Add host to queue
+		$hosts{$ip}{COUNT} = 1;
+		$hosts{$ip}{SOCKET} = undef;
+		$hosts{$ip}{RESOLVED} = 'p';
+		($hosts{$ip}{DBNAME}, $hosts{$ip}{DBTYPE}, $hosts{$ip}{DBTIME}) = dbread($ip);
+		$stats{TOTHOSTS}++;
+
+		if ($opts{dbfirst} and defined $hosts{$ip}{DBNAME}) {
+			$hosts{$ip}{NAME} = $hosts{$ip}{DBNAME};
+			$hosts{$ip}{RESOLVED} = 'D'; 
+			debug("host from db: $ip $hosts{$ip}{NAME}", 2);
+		} else {
+			if ($opts{dbonly}) {
+				$hosts{$ip}{RESOLVED} = 'F';
+			} else {
+				push @q, $ip; 
+			}
+		}
+	}
+
+	return 1;
+}
+
+sub removehost {
+	# removehost(ip)
+    # Removes a host from the cache
+	# ip: an IP address (x.y.z.k)
+	# RETURNS: 1 (always)
+
+	my $ip = shift;
+
+	if ($opts{progress}) {
+		if ($progresschars % 50 == 0) {
+			printf STDERR "\n%10d: ", $progresschars;
+		}
+		$progresschars++;
+		my $status = $hosts{$ip}{RESOLVED};
+		$status =~ tr/NRD/.rd/;
+		print STDERR $status;
+	}
+
+	# Decrement reference count
+	if (--$hosts{$ip}{COUNT} < 1) {
+		# No more references, so remove host from cache
+
+		# Check if host was resolved
+		if (index('DNR', $hosts{$ip}{RESOLVED}) >= 0) {
+			$stats{HRESOLVED}++;
+			dbwrite($ip, $hosts{$ip}{NAME}, $hosts{$ip}{RESOLVED});
+		}
+
+		freesocket($hosts{$ip}{SOCKET});
+		delete $hosts{$ip};
+
+		debug("Removed host: $ip", 2);
+	}
+
+	return 1;
+}
+
+sub addclass {
+	# addclass(ip)
+    # Adds the classes of a host to the cache/queue
+	# ip: an IP address (x.y.z.k)
+	# RETURNS: 1 (always)
+
+	# Valid values for a {RESOLVED} field:
+	#   'p' - pending
+	#   'F' - failed
+	#   'D' - resolved from db
+	#   'N' - resolved from nameserver
+	
+	my $ip = shift;
+	
+	$ip =~ /$ipmask/;
+
+	# Extract the classes this host belongs to and queue them
+	for ("$1.$2.$3", "$1.$2", "$1") {
+		debug("Adding class: $_", 2);
+		if (exists $class{$_}) {
+			# Class already queued, just increment the reference count
+			$class{$_}{COUNT}++;
+		} else {
+			# Add class to queue
+			$class{$_}{COUNT} = 1;
+			$class{$_}{SOCKET} = undef;
+			$class{$_}{RESOLVED} = 'p';
+
+			($class{$_}{DBNAME}, $class{$_}{DBTYPE}, $class{$_}{DBTIME}) = dbread($_);
+
+			if ($opts{dbfirst} and defined $class{$_}{DBNAME}) {
+				$class{$_}{NAME} = $class{$_}{DBNAME};
+				$class{$_}{RESOLVED} = 'D';
+				debug("class from db: $_ $class{$_}{NAME}", 2);
+			} else {
+				if ($opts{dbonly}) {
+					$class{$_}{RESOLVED} = 'F';
+				} else {
+					# prioritize class in the queue
+					unshift @q, $_; 
+				}
+			}
+		}
+	}
+
+	return 1;
+}
+
+sub removeclass {
+	# removeclass(ip)
+    # Removes all classes from an ip from the cache
+	# ip: an IP address (x.y.z.k)
+	# RETURNS: 1 (always)
+
+	my $ip = shift;
+
+	$ip =~ /$ipmask/;
+
+	for ("$1.$2.$3", "$1.$2", "$1") {
+		if (--$class{$_}{COUNT} < 1) {
+			# Last reference, if resolved store to db
+			$class{$_}{RESOLVED} eq 'N' and dbwrite($_, $class{$_}{NAME}, $class{$_}{RESOLVED});
+			
+			freesocket($class{$_}{SOCKET});
+			delete $class{$_};
+
+			debug("Removed class: $_", 2);
+		}
+	}
+
+	return 1;
+}
+
+sub checkrecurse {
+	# checkrecurse(ip)
+    # Checks for classes if normal resolve failed
+	# ip: an IP address (x.y.z.k)
+	# RETURNS: 1 (always)
+	
+	my $ip = shift;
+
+	debug("Check recurse $ip", 2);
+
+	$ip =~ /$ipmask/;
+
+	for ("$1.$2.$3", "$1.$2", "$1") {
+		# if still resolving class, return 
+		$class{$_}{RESOLVED} eq 'p' and return 1;
+		# class was resolved, return class name
+		if ($class{$_}{RESOLVED} ne 'F') {
+			$hosts{$ip}{NAME} = maskthis($ip, $class{$_}{NAME});
+			$hosts{$ip}{RESOLVED} = 'R';
+			removeclass($ip);
+			return 1;
+		}
+		# NOTE: The order of the classes is important. If we have a
+		#       class C resolved, no need to wait for the upper classes
+	}
+
+	# No luck, mark as failed
+	$hosts{$ip}{RESOLVED} = 'F';
+	removeclass($ip);
+
+	return 1;
+}
+
+sub maskthis {
+	# maskthis(ip, class)
+    # Masks a fake hostname based on an IP and a resolved class
+	# ip: an IP address (x.y.z.k)
+	# class: the class name (somewhere.com)
+	# RETURNS: a masked representation of the IP (x.y.z.k.somewhere.com)
+
+	my ($ip, $domain) = @_;
+	my $masked = $opts{mask};
+
+	$masked =~ s/%i/$ip/;
+	$masked =~ s/%c/$domain/;
+	
+	return $masked;
+}
+
+sub getlines {
+	# getlines()
+    # Fetches lines from the file into our line buffer
+	# RETURNS: 1 if something was read, 0 if EOF
+
+	eof(FILE) and return 0;
+
+	my $line;
+
+	while ($#lines < $opts{linecache} - 1 and $line = <FILE>) {
+		my @hosts;
+		while ($line =~ /$ipmask/g) {
+			push @hosts, "$1.$2.$3.$4";
+		    addhost("$1.$2.$3.$4");
+		}
+		$stats{TOTLINES}++; 
+		push @lines, { TEXT => $line, HOSTS => \@hosts };
+	}
+
+	return 1;
+}
+
+sub makequeries {
+	# makequeries()
+    # Takes IPs and classes from the queue and sends them to the query
+	# function. This controls the number of sockets in use.
+	# RETURNS: 1 (always)
+	
+	for (1..($opts{sockets} - $sel->count)) {
+		my $query = $q[0];
+		!$query and last;
+		my $ok = 0;
+		if ($query =~ /$ipmask/) {
+			$ok = query($query, 'H');
+		} elsif (exists $class{$query}) {
+			$ok = query($query, 'C');
+		} else {
+			debug("Out of context class $query was skipped", 3);
+			$ok = 1;
+		}
+		$ok ? shift @q : last;
+	}
+
+	return 1;
+}
+
+sub freesocket {
+	# freesocket(socket)
+    # Frees a socket from our main select and the socket itself
+	# RETURNS: 1 if freed
+	#          0 if socket didn't exist
+
+	my $socket = shift;
+
+	!(defined $socket) and return 0;
+
+	$sel->remove($socket);
+
+	my $type = $socks{fileno($socket)}{TYPE};
+	my $query = $socks{fileno($socket)}{QUERY};
+
+	if ($type eq 'H') {
+		!exists $hosts{$query} and die "no such host: $query";
+		undef $hosts{$query}{SOCKET};
+	} else {
+		!exists $class{$query} and die "no such class: $query";
+		undef $class{$query}{SOCKET};
+	}
+
+	delete $socks{fileno($socket)};
+
+	debug("Freed socket for query $query - socket count: " . (keys %socks) . " - " . $sel->count, 2);
+	
+	return 1;
+}
+
+sub nsfailed {
+	# nsfailed(query, type)
+    # Updates statuses when nameserver resolution fails
+	# (bogus reply or timeout)
+	# query: the DNS query
+	# type: H for host or C for class
+	# RETURNS: 1 (always)
+
+	my ($query, $type) = @_;
+
+	if ($type eq 'H') {
+		if (defined $hosts{$query}{DBNAME}) {
+			$hosts{$query}{NAME} = $hosts{$query}{DBNAME};
+			$hosts{$query}{RESOLVED} = 'D';
+		} elsif ($opts{recursive}) {
+			$hosts{$query}{RESOLVED} = 'r';
+			addclass($query);
+		} else {
+			$hosts{$query}{RESOLVED} = 'F';
+		}
+	} else { 
+		if (defined $class{$query}{DBNAME}) {
+			$class{$query}{NAME} = $class{$query}{DBNAME};
+			$class{$query}{RESOLVED} = 'D';
+		} else {
+			$class{$query}{RESOLVED} = 'F';
+		}
+	}
+
+	return 1;
+}
+
+sub checkresponse {
+	# checkresponse()
+    # Checks sockets for DNS replies and processes them
+	# RETURNS: 1 (always)
+
+	# Check pending replies, give it 5 seconds at most
+	for ($sel->can_read(5)) {
+		my $resolved = 0;
+		my $fileno = fileno($_);
+		my $query = $socks{$fileno}{QUERY};
+		my $type = $socks{$fileno}{TYPE};
+		my $timespan = time() - $socks{$fileno}{TIME};
+		$stats{TOTTIME} += $timespan;
+
+		my $packet = $res->bgread($_);
+		$stats{RECEIVED}++;
+
+		debug("Response for query $query (" . $sel->count . ")", 2);
+
+		# Got the reply and saved the results, so free the socket
+		freesocket($_);
+
+		if ($packet) {
+			for ($packet->answer) {
+				# For each DNS answer, check the data received
+				if ($type eq 'H') {
+					if (defined $_->{ptrdname}) {
+						$hosts{$query}{NAME} = $_->{ptrdname};
+						$hosts{$query}{RESOLVED} = 'N';
+
+						$resolved = 1;
+
+						debug("response HOST: $query is " . $hosts{$query}{NAME}, 2);
+					} else {
+						debug("undefined response for query $query", 2);
+					}
+				} else {
+					my $fulldomain;
+
+					# Check for the previously used SOA records and
+					# the current NS records
+					if    ($_->type eq 'SOA') { $fulldomain = $_->{mname}; }
+					elsif ($_->type eq 'NS') { $fulldomain = $_->{nsdname}; } 
+					else { next; }
+
+					debug("Class: $fulldomain", 3);
+
+					my ($ns, $domain) = $fulldomain =~ /([^\.]+)\.(.*)/;
+					if (defined $domain) {
+						# Avoid truncating records with no machine name
+						$domain =~ /\./ or $domain = $fulldomain;
+						$class{$query}{NAME} = lc $domain;
+						$class{$query}{RESOLVED} = 'N';
+						$resolved = 1;
+					}
+				}
+			}
+		}
+		
+		if ($resolved) {
+			$stats{RESOLVED}++;
+			$timespan > $stats{MAXTIME} and $stats{MAXTIME} = $timespan;
+		} else {
+			$stats{BOGUS}++;
+			nsfailed($query, $type);
+		}
+	}
+
+	return 1;
+}
+
+sub checktimeouts {
+	# checktimeouts()
+    # Checks sockets for DNS reply timeouts
+	# RETURNS: 1 (always)
+
+	my $now = time();
+
+	for ($sel->handles) {
+		# Iterate through all active sockets
+		my $fileno = fileno($_);
+		my $query = $socks{$fileno}{QUERY};
+		my $type = $socks{$fileno}{TYPE};
+
+		my $timespan = $now - $socks{$fileno}{TIME};
+		if ($timespan > $opts{timeout}) {
+			# We have a timeout
+			$stats{TIMEOUT}++;
+			$stats{TOTTIME} += $timespan;
+
+			# Mark query owner appropriately
+			nsfailed($query, $type);
+
+			freesocket($_);
+		}
+	}
+
+	return 1;
+}
+
+sub printresults {
+	# printresults()
+    # Checks if the next lines in our buffer have their IPs resolved
+	# and print the results to STDOUT
+	# RETURNS: 1 (always)
+	
+	debug("Sent: $stats{SENT}, Received: $stats{RECEIVED}, Resolved: $stats{RESOLVED}, Bogus: $stats{BOGUS}, Timeout: $stats{TIMEOUT}", 1);
+
+	while ($#lines != -1) {
+		# We still have lines in the cache
+		my %line = %{$lines[0]};
+		!@{$line{HOSTS}} and print($line{TEXT}), shift @lines, next;
+
+		for (@{$line{HOSTS}}) {
+			# Check all hosts for this line (pending, recursing)
+			$hosts{$_}{RESOLVED} eq 'r' and checkrecurse($_);
+			index('pr', $hosts{$_}{RESOLVED}) >= 0 and goto done;
+		}
+
+		# Nothing pending for this line if we got here
+
+		for (@{$line{HOSTS}}) {
+			# Update line with resolved hosts
+		    $hosts{$_}{RESOLVED} ne 'F' and $line{TEXT} =~ s/$_/$hosts{$_}{NAME}/;
+
+			# We don't need this host anymore
+		    removehost($_);
+		}
+
+		print $line{TEXT};
+		shift @lines;
+	}
+	done:
+}
+
+sub printstats {
+	# printstats()
+    # Print the statistics gathered during program run
+	# RETURNS: 1 (always)
+
+	$opts{nostats} and return;
+	$opts{progress} and print STDERR "\n\n";
+
+	my $timespan = time() - $stats{STARTTIME};
+
+	print STDERR 
+		"     Total Lines: $stats{TOTLINES}\n",
+		"     Total Time : ", 
+			strftime("%H:%M:%S", gmtime($timespan)), " (", 
+			sprintf("%.2f", $timespan ? ($stats{TOTLINES} / $timespan) : 0), " lines/s)\n",
+		"     Total Hosts: $stats{TOTHOSTS}\n",
+		"  Resolved Hosts: $stats{HRESOLVED} (", 
+			sprintf("%.2f", $stats{TOTHOSTS} ? ($stats{HRESOLVED} / $stats{TOTHOSTS} * 100) : 0), "%)\n",
+		"Unresolved Hosts: ", 
+			$stats{TOTHOSTS} - $stats{HRESOLVED}, " (", 
+			sprintf("%.2f", $stats{TOTHOSTS} ? (($stats{TOTHOSTS} - $stats{HRESOLVED}) / $stats{TOTHOSTS} * 100) : 0), "%)\n",
+		"Average DNS time: ", 
+			sprintf("%.4f", $stats{SENT} ? ($stats{TOTTIME} / $stats{SENT}) : 0), "s per request\n",
+		"    Max DNS time: ", $stats{MAXTIME}, "s (consider this value for your timeout)\n";
+
+	debug("\n\nhosts: " .  scalar(keys %hosts) . "\nclasses: " . scalar(keys %class) .  "\nselect: " .  $sel->count . "\n", 1);
+	
+	return 1;
+}
+
+sub query {
+	# query()
+    # Sends out an assynchronous DNS query
+	# RETURNS: 1 if successful
+	#          0 if failed (no free sockets)
+
+	my ($find, $type) = @_;
+
+	my $send = ($type eq 'H') ? $find : (join('.', reverse(split(/\./, $find))) . '.in-addr.arpa');
+
+	# Send a query of format PTR for hosts or NS for classes
+	my $sock = $res->bgsend($send, ($type eq 'H') ? 'PTR' : 'NS');
+	if (!$sock) {
+			# We're out of sockets. Warn the user and continue
+			print STDERR "Error opening socket for bgsend. Are we out of sockets?\n";
+			return 0;
+	}
+
+	$stats{SENT}++;
+	$sel->add($sock);
+
+	# Make a socket record for cross referencing
+	my $fileno = fileno($sock);
+	$socks{$fileno}{TIME} = time();
+	$socks{$fileno}{QUERY} = $find;
+	$socks{$fileno}{TYPE} = $type;
+
+	debug("Sent query of type $type: $find", 2);
+
+	# Update the owner of the socket also for easy referencing
+	$type eq 'H' ? ($hosts{$find}{SOCKET} = $sock) : ($class{$find}{SOCKET} = $sock);
+
+	return 1;
+}
+

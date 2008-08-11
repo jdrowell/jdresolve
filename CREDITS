@@ -1,0 +1,86 @@
+
+   I'd like to thank the following people who have helped me during the
+   development process of jdresolve. The list is ordered chronologically.
+     * Michael Fuhr
+          + Author of the excellent Net::DNS module
+     * [1]Pekka Savola
+          + [test] Perl 5.004m7 warning messages
+          + [test] the "Are we out of sockets" abort
+          + [sugg] the --anywhere functionality
+     * Mark Roedel
+          + [sugg] Configurable name mask when recursing (-n <mask>)
+          + [test] unresolved IPs
+     * Hugo Haas
+          + [patch] Tentative line caching
+          + [test] Testing on huge log files
+          + [test] Re-resolving logs with v0.3pre2
+     * Renaud Bruyeron
+          + [patch] Initial fix for bgsend error handling
+          + [test] Testing on huge log files
+     * Johannes la Poutre
+          + [test] Perl 5.004_04 warning messages
+          + [test] Unresolved IPs
+          + [bench] On Ultrasparc 10
+     * John Croft
+          + [patch] Division by zero in statistics
+          + [bench] Against logresolve
+     * Andrezj Tobola
+          + [patch] Division by zero in statistics
+     * Dominique Bongard
+          + [test] unresolved IPs
+          + [sugg] whois lookups (not implemented yet)
+     * [2]Michael A. Alderete
+          + [test] warnings on FreeBSD
+     * [3]Skip Horine
+          + [test] a bug when not using the -r option
+     * [4]Mads Kiilerich
+          + [sugg] the --dbonly option
+     * [5]Craig Sanders
+          + [patch] man pages for all programs
+          + Craig is the maintainer for the jdresolve Debian package
+     * [6]Ken Chase
+          + [sugg] the --dbonly option (also)
+          + [sugg] expiring the database
+          + [sugg] marking recurses entries
+          + [sugg] negative caching
+     * [7]Gary Gurevich
+          + [patch] the --anywhere option
+          + [patch] use NS records instead of SOA
+     * [8]Alexander Bruch
+          + [test] hang when resolving '0.0.0.0'
+     * [9]Alex Howansky
+          + [patch] created the Reptor program based on jdresolve
+     * [10]Matthias Ivers
+          + [patch] another variation of the --anywhere option
+     * [11]Steve Klassen
+          + [patch] a variation of --anywhere for NT logs
+     * [12]Jürg Siegenthaler
+          + [test] warnings with ActiveState Perl 5.6.0.613
+     * [13]James H. Thompson
+          + [patch] A fix for the "oops" assertion bug, new
+            "--processstatus" option (not merged, I went with the
+            existing "--debug" option and a new "--progress" option)
+     * [14]Dennis Boone
+          + [sugg] Search the full Perl @INC path for Net::DNS
+       
+   [test] = testing [sugg] = suggestion [patch] = patch
+   
+   Note: I didn't keep track of some email addresses, if you'd like to
+   have your email updated please let me know
+
+References
+
+   1. mailto:Pekka.Savola@netcore.fi
+   2. mailto:alderete@be.com
+   3. mailto:atc@atc.nethosting.net
+   4. mailto:Mads@Kiilerich.com
+   5. mailto:cas@taz.net.au
+   6. mailto:mathboy@velocet.cat
+   7. mailto:gary@dls.net
+   8. mailto:abruch@mail.ffm.plusline.de
+   9. mailto:alex@wankwood.com
+  10. mailto:ivers@realophob.de
+  11. mailto:sklassen@concentric.com
+  12. mailto:Juerg.Siegenthaler@gmx.ch
+  13. mailto:jht@mail.off-road.com
+  14. mailto:drb@msu.edu

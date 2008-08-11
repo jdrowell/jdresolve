@@ -1,0 +1,87 @@
+
+     * 2000-09-23: 0.6.1
+          + Increased performance on recursive operation. Now classes are
+            only checked if the host lookup fails (based on a patch by
+            James H. Thompson)
+          + New "-p" or "--progress" command line option. This will print
+            a dot for each line that is resolved, showing the status of
+            the resolve process
+          + Fixed the "oops" assertion bug introduced in 0.6.0
+          + Code cleanup (better separation of host and class handling
+            functions)
+          + Now searches the full Perl @INC path for Net::DNS
+     * 2000-06-17: 0.6.0
+          + Improved performance (lines/s) and less cpu usage
+          + Better line caching algorithm
+          + Reduced memory footprint
+          + The code is now fully commented
+          + A new ./configure script (locates Perl, Net::DNS, etc)
+          + Now supports virtually any log format, and many IPs per line
+            (thanks Gary)
+          + More internal debugging messages
+          + Class octects are not inverted anymore in the database, and
+            also shows how the entry was resolved and at what time
+            (WARNING: this means the database format has changed)
+          + Doesn't abort anymore if a machine runs out of sockets (will
+            continue processing and wait for free sockets)
+          + Added the "--dbfirst" and "dbonly" options to check the
+            database before sending DNS queries or not to send queries at
+            all
+          + Now uses NS queries for recursion (instead of SOA) (suggested
+            by Gary)
+          + Integrated the "--dumpdb", "--mergedb" and "--unresolved"
+            options and killed the corresponding external programs
+          + Added option "--expiredb=<hours>" to expire database entries
+            older than <hours> hours
+     * 1999-08-26: 0.5.2
+          + Fixed memory leak when the --database option was not in use
+          + Fixed warning messages when the --recursive option was not in
+            use
+     * 1999-08-16: 0.5.1
+          + Fixed warning messages on FreeBSD
+          + Format of jdresolve-dumpdb dumps have changed. Now classes
+            are dumped in truncated IP format (not in-addr.arpa format as
+            before)
+          + Added jdresolve-mergedb and jdresolve-unresolved utils
+     * 1999-07-27: 0.5
+          + Added database support. Tested DB_File, but any db variant
+            (dbm, gdbm, sdbm, etc) should work. The main purpose of this
+            option is to offer fallback in case DNS servers are down and
+            allow a general performace increase by allowing you to lower
+            your timeout value without sacrificing resolved percentage
+          + New support program "jdresolve-dumpdb" to dump the databases
+            created with the "--database" switch
+     * 1999-07-14: 0.4
+          + Changed name to jdresolve not to cause confusion with other
+            projects
+          + GNU compliance changes: added long command line options thru
+            Getopts::Long, no warranties warning, copyright notice
+          + Fixed a division by zero bug with statistics (thanks to John
+            Croft and Andrezj Tobola for pointing this out)
+          + Made available RPM and SRPM packages for jdresolve and
+            Net::DNS
+     * 1999-07-09: 0.3
+          + Totally redesigned main loop algorithm
+          + Now supports _huge_ log files (low memory usage)
+          + Input from STDIN if file is '-' since we only need 1 pass now
+          + New "-l" switch to control memory line caching
+          + Quick script 'rhost' to resolve single hosts with recursion
+          + Added more statistics (total time, lines/s, etc)
+          + No more warnings with Perl 5.004_04
+          + Code cleanup, now uses a more modular approach
+          + Updated documentation
+     * 1999-07-02: 0.2
+          + Added debug levels 1 and 2
+          + Only warns about invalid/resolved IPs if debug level >= 2
+          + You can now run logresolve.pl on partly/fully resolved logs
+            with no warning messages
+          + Added statistics at end of run
+          + New option -n to supress statistics
+          + New option -m to specify a custom mask to apply to IPs
+            resolved by recurrence. accepts %i for IP and %c for class
+            name
+          + Packaged as a .tar.gz file with COPYING, INSTALL, README,
+            CREDITS, CHANGELOG and logresolve.pl files. Documentation is
+            a Good Thing.
+     * 1999-06-29: 0.1
+          + Initial release

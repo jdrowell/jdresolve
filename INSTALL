@@ -1,0 +1,62 @@
+
+   PREREQUISITES
+     * A decent Perl distribution (IO::Select, etc). Tested with Perl
+       5.005_03, 5.004m7 and 5.004_04, all run without warnings
+     * The Net::DNS module
+       
+   USING DEBIAN
+   
+   This couldn't be easier:
+   
+     apt-get install jdresolve
+     
+   No need to download anything by hand, as jdresolve is now a Debian
+   app. That'll install any dependencies too :) Debian kicks ass.
+   
+   USING THE RPM PACKAGES (RedHat, Mandrake, etc)
+   
+   Just use the following commands:
+   
+     rpm -Uvh perl-Net-DNS-0.12-1.noarch.rpm rpm -Uvh
+     jdresolve-0.6.1-1.noarch.rpm
+     
+   USING THE .TAR.GZ OR .TAR.BZ2 PACKAGES (Any distro)
+   
+   To install the Net::DNS module, fetch it from a CPAN mirror
+   (http://www.cpan.org), or use the CPAN module to do it automagically.
+   
+   Using the CPAN modules is simple. You can run it from the command line
+   or interactively:
+     * command line: perl -MCPAN -e "command"
+     * interactive: perl -MCPAN -e shell
+       
+   To keep you Perl distribution updated, you should issue command like
+   "install Bundle::CPAN" regularly. Here is some sample output:
+   [root@xhost /root]# perl -MCPAN -e "install Bundle::CPAN"
+   CPAN: LWP::UserAgent loaded ok
+   Fetching with LWP:
+     ftp://cpan.if.usp.br/pub/mirror/CPAN/authors/01mailrc.txt.gz
+   Going to read /root/.cpan/sources/authors/01mailrc.txt.gz
+   CPAN: Compress::Zlib loaded ok
+   Going to read /root/.cpan/sources/modules/02packages.details.txt.gz
+   Scanning cache /root/.cpan/build for sizes
+   Fetching with LWP:
+     ftp://cpan.if.usp.br/pub/mirror/CPAN/modules/03modlist.data.gz
+   Going to read /root/.cpan/sources/modules/03modlist.data.gz
+   MD5 is up to date.
+   File::Spec is up to date.
+   Compress::Zlib is up to date.
+   Archive::Tar is up to date.
+   Data::Dumper is up to date.
+   Net::Telnet is up to date.
+   Net::Cmd is up to date.
+   Term::ReadKey is up to date.
+   Term::ReadLine::Perl is up to date.
+   CPAN::WAIT is up to date.
+   CPAN is up to date.
+
+   So for jdresolve to work, you should at least issue an "install
+   Net::DNS".
+   
+   After that just go back to where you unpacked jdresolve and run
+   './configure' and then 'make install' as root.

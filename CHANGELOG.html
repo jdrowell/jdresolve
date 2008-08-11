@@ -1,0 +1,104 @@
+<UL>
+
+<LI>2000-09-23: 0.6.1
+<UL>
+<P>
+<LI>Increased performance on recursive operation. Now classes are only checked if the host lookup fails (based on a patch by James H. Thompson)
+<LI>New "-p" or "--progress" command line option. This will print a dot for each line that is resolved, showing the status of the resolve process
+<LI>Fixed the "oops" assertion bug introduced in 0.6.0
+<LI>Code cleanup (better separation of host and class handling functions)
+<LI>Now searches the full Perl @INC path for Net::DNS
+</P>
+</UL>
+<LI>2000-06-17: 0.6.0
+<UL>
+
+<P>
+<LI>Improved performance (lines/s) and less cpu usage
+<LI>Better line caching algorithm
+<LI>Reduced memory footprint
+<LI>The code is now fully commented
+<LI>A new ./configure script (locates Perl, Net::DNS, etc)
+<LI>Now supports virtually any log format, and many IPs per line (thanks Gary)
+<LI>More internal debugging messages
+<LI>Class octects are not inverted anymore in the database, and also shows how the entry was resolved and at what time (WARNING: this means the database format has changed)
+<LI>Doesn't abort anymore if a machine runs out of sockets (will continue processing and wait for free sockets)
+<LI>Added the "--dbfirst" and "dbonly" options to check the database before sending DNS queries or not to send queries at all
+<LI>Now uses NS queries for recursion (instead of SOA) (suggested by Gary)
+<LI>Integrated the "--dumpdb", "--mergedb" and "--unresolved" options and killed the corresponding external programs
+<LI>Added option "--expiredb=&lt;hours&gt;" to expire database entries older than &lt;hours&gt; hours
+</P>
+</UL>
+
+<LI>1999-08-26: 0.5.2
+<UL>
+<P>
+<LI>Fixed memory leak when the --database option was not in use
+<LI>Fixed warning messages when the --recursive option was not in use
+</P>
+</UL>
+
+<LI>1999-08-16: 0.5.1
+<UL>
+<P>
+<LI>Fixed warning messages on FreeBSD
+<LI>Format of jdresolve-dumpdb dumps have changed. Now classes are dumped in truncated IP format (not in-addr.arpa format as before)
+<LI>Added jdresolve-mergedb and jdresolve-unresolved utils
+</P>
+</UL>
+
+<LI>1999-07-27: 0.5
+<UL>
+<P>
+<LI>Added database support. Tested DB_File, but any db variant (dbm, gdbm, sdbm, etc) should work. The main purpose of this option is to offer fallback in case DNS servers are down and allow a general performace increase by allowing you to lower your timeout value without sacrificing resolved percentage
+<LI>New support program "jdresolve-dumpdb" to dump the databases created with the "--database" switch
+</P>
+</UL>
+
+<LI>1999-07-14: 0.4
+<UL>
+<P>
+<LI>Changed name to jdresolve not to cause confusion with other projects
+<LI>GNU compliance changes: added long command line options thru Getopts::Long, no warranties warning, copyright notice
+<LI>Fixed a division by zero bug with statistics (thanks to John Croft and Andrezj Tobola for pointing this out)
+<LI>Made available RPM and SRPM packages for jdresolve and Net::DNS
+</P>
+</UL>
+
+<LI>1999-07-09: 0.3
+<UL>
+<P>
+<LI>Totally redesigned main loop algorithm
+<LI>Now supports _huge_ log files (low memory usage)
+<LI>Input from STDIN if file is '-' since we only need 1 pass now
+<LI>New "-l" switch to control memory line caching
+<LI>Quick script 'rhost' to resolve single hosts with recursion
+<LI>Added more statistics (total time, lines/s, etc)
+<LI>No more warnings with Perl 5.004_04
+<LI>Code cleanup, now uses a more modular approach
+<LI>Updated documentation
+</P>
+</UL>
+
+<LI>1999-07-02: 0.2
+<UL>
+<P>
+<LI>Added debug levels 1 and 2
+<LI>Only warns about invalid/resolved IPs if debug level >= 2
+<LI>You can now run logresolve.pl on partly/fully resolved logs with no warning messages
+<LI>Added statistics at end of run
+<LI>New option -n to supress statistics
+<LI>New option -m to specify a custom mask to apply to IPs resolved by recurrence. accepts %i for IP and %c for class name
+<LI>Packaged as a .tar.gz file with COPYING, INSTALL, README, CREDITS, CHANGELOG and logresolve.pl files. Documentation is a Good Thing.
+</P>
+</UL>
+
+<LI>1999-06-29: 0.1
+<UL>
+<P>
+<LI>Initial release
+</P>
+</UL>
+
+</UL>
+

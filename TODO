@@ -1,0 +1,15 @@
+
+     * To do:
+          + negative caching
+          + progress bar (with ETA)
+          + resolve the last few unresolved IPs. I'm looking into a whois
+            lookup or a "closest hop" approach
+          + arrange benchmarks into a comprehensive table
+          + test with Perl 5.6.0 (waiting for woody packages :P)
+     * Done:
+          + direct STDIN input (0.3)
+          + add ability to edit databases create with "--database"
+            (0.5.1)
+          + clean up "dangling" A/B/C class sockets during run (0.6.0)
+          + expire database entries (0.6.0)
+          + further optimizations (getresolved()) (0.6.0)

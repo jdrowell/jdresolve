@@ -1,0 +1,7 @@
+
+   Know bugs:
+     * The host count is not accurate for logs that don't fit in the line
+       cache. This is due to the fact that we can't tell if a host has
+       shown up before during the resolve process. A per-session database
+       could be used for this, but would slow down the process and also
+       require extra database support.
