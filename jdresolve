@@ -342,7 +342,8 @@ $opts{debug} and $| = 1;
 my $filename = $opts{stdin} ? '-' : $ARGV[0];
 
 # Set our IP matching regexp depending on the command line options
-my $ipmask = $opts{anywhere} ? '(\d+)\.(\d+)\.(\d+)\.(\d+)' : '^(\d+)\.(\d+)\.(\d+)\.(\d+)';
+my $ipmask = '([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])';
+my $lineipmask = $opts{anywhere} ? " $ipmask " : "^$ipmask ";
 
 my $res = new Net::DNS::Resolver; # used for sending dns requests
 my $sel = new IO::Select; # controls the open sockets
@@ -534,13 +535,14 @@ sub addhost {
 
 	my $ip = shift;
 
-	debug("Adding host: $ip", 2);
+	debug("Trying to add host: $ip", 3);
 	
 	if (exists $hosts{$ip}) {
 		# Host already queued, just increment the reference count
 		$hosts{$ip}{COUNT}++; 
 	} else {
 		# Add host to queue
+		debug("Adding host: $ip", 2);
 		$hosts{$ip}{COUNT} = 1;
 		$hosts{$ip}{SOCKET} = undef;
 		$hosts{$ip}{RESOLVED} = 'p';
@@ -733,7 +735,7 @@ sub getlines {
 
 	while ($#lines < $opts{linecache} - 1 and $line = <FILE>) {
 		my @hosts;
-		while ($line =~ /$ipmask/g) {
+		while ($line =~ /$lineipmask/g) {
 			push @hosts, "$1.$2.$3.$4";
 		    addhost("$1.$2.$3.$4");
 		}
