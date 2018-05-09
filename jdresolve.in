@@ -180,7 +180,7 @@ use Getopt::Long;
 use POSIX qw(strftime);
 use DB_File;
 use Regexp::Common qw(net);
-use NET::IP;
+use Net::IP;
 #use GDBM_File;
 
 # Global constants
