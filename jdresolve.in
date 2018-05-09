@@ -857,7 +857,7 @@ sub checkresponse {
 				# For each DNS answer, check the data received
 				if ($type eq 'H') {
 					if (defined $_->{ptrdname}) {
-						$hosts{$query}{NAME} = $_->{ptrdname};
+						$hosts{$query}{NAME} = join(".",@{$_->{ptrdname}->{label}});
 						$hosts{$query}{RESOLVED} = 'N';
 
 						$resolved = 1;
