@@ -179,6 +179,8 @@ use IO::Select;
 use Getopt::Long; 
 use POSIX qw(strftime);
 use DB_File;
+use Regexp::Common qw(net);
+use NET::IP;
 #use GDBM_File;
 
 # Global constants
@@ -343,6 +345,8 @@ my $filename = $opts{stdin} ? '-' : $ARGV[0];
 
 # Set our IP matching regexp depending on the command line options
 my $ipmask = $opts{anywhere} ? '(\d+)\.(\d+)\.(\d+)\.(\d+)' : '^(\d+)\.(\d+)\.(\d+)\.(\d+)';
+my $ipv4mask = $opts{anywhere} ? $RE{net}{IPv4}{-keep} : '^'.$RE{net}{IPv4}{-keep};
+my $ipv6mask = $opts{anywhere} ? $RE{net}{IPv6}{-keep} : '^'.$RE{net}{IPv6}{-keep};
 
 my $res = new Net::DNS::Resolver; # used for sending dns requests
 my $sel = new IO::Select; # controls the open sockets
@@ -469,8 +473,8 @@ sub unresolved {
 	my %ips;
 
 	while (<FILE>) {
-	    !/$ipmask\s/ and next;
-	    my $ip = "$1.$2.$3.$4";
+	    !/($ipv4mask|$ipv6mask)\s/ and next;
+	    my $ip = "$1";
 	    exists $ips{$ip} and next;
 	
 	    $ips{$ip} = 1;
@@ -614,32 +618,32 @@ sub addclass {
 	
 	my $ip = shift;
 	
-	$ip =~ /$ipmask/;
-
-	# Extract the classes this host belongs to and queue them
-	for ("$1.$2.$3", "$1.$2", "$1") {
-		debug("Adding class: $_", 2);
-		if (exists $class{$_}) {
-			# Class already queued, just increment the reference count
-			$class{$_}{COUNT}++;
-		} else {
-			# Add class to queue
-			$class{$_}{COUNT} = 1;
-			$class{$_}{SOCKET} = undef;
-			$class{$_}{RESOLVED} = 'p';
-
-			($class{$_}{DBNAME}, $class{$_}{DBTYPE}, $class{$_}{DBTIME}) = dbread($_);
-
-			if ($opts{dbfirst} and defined $class{$_}{DBNAME}) {
-				$class{$_}{NAME} = $class{$_}{DBNAME};
-				$class{$_}{RESOLVED} = 'D';
-				debug("class from db: $_ $class{$_}{NAME}", 2);
+	if ($ip =~ /$ipmask/) {
+		# Extract the classes this host belongs to and queue them
+		for ("$1.$2.$3", "$1.$2", "$1") {
+			debug("Adding class: $_", 2);
+			if (exists $class{$_}) {
+				# Class already queued, just increment the reference count
+				$class{$_}{COUNT}++;
 			} else {
-				if ($opts{dbonly}) {
-					$class{$_}{RESOLVED} = 'F';
+				# Add class to queue
+				$class{$_}{COUNT} = 1;
+				$class{$_}{SOCKET} = undef;
+				$class{$_}{RESOLVED} = 'p';
+
+				($class{$_}{DBNAME}, $class{$_}{DBTYPE}, $class{$_}{DBTIME}) = dbread($_);
+
+				if ($opts{dbfirst} and defined $class{$_}{DBNAME}) {
+					$class{$_}{NAME} = $class{$_}{DBNAME};
+					$class{$_}{RESOLVED} = 'D';
+					debug("class from db: $_ $class{$_}{NAME}", 2);
 				} else {
-					# prioritize class in the queue
-					unshift @q, $_; 
+					if ($opts{dbonly}) {
+						$class{$_}{RESOLVED} = 'F';
+					} else {
+						# prioritize class in the queue
+						unshift @q, $_;
+					}
 				}
 			}
 		}
@@ -656,17 +660,17 @@ sub removeclass {
 
 	my $ip = shift;
 
-	$ip =~ /$ipmask/;
+	if ($ip =~ /$ipmask/) {
+		for ("$1.$2.$3", "$1.$2", "$1") {
+			if (--$class{$_}{COUNT} < 1) {
+				# Last reference, if resolved store to db
+				$class{$_}{RESOLVED} eq 'N' and dbwrite($_, $class{$_}{NAME}, $class{$_}{RESOLVED});
 
-	for ("$1.$2.$3", "$1.$2", "$1") {
-		if (--$class{$_}{COUNT} < 1) {
-			# Last reference, if resolved store to db
-			$class{$_}{RESOLVED} eq 'N' and dbwrite($_, $class{$_}{NAME}, $class{$_}{RESOLVED});
-			
-			freesocket($class{$_}{SOCKET});
-			delete $class{$_};
+				freesocket($class{$_}{SOCKET});
+				delete $class{$_};
 
-			debug("Removed class: $_", 2);
+				debug("Removed class: $_", 2);
+			}
 		}
 	}
 
@@ -683,20 +687,20 @@ sub checkrecurse {
 
 	debug("Check recurse $ip", 2);
 
-	$ip =~ /$ipmask/;
-
-	for ("$1.$2.$3", "$1.$2", "$1") {
-		# if still resolving class, return 
-		$class{$_}{RESOLVED} eq 'p' and return 1;
-		# class was resolved, return class name
-		if ($class{$_}{RESOLVED} ne 'F') {
-			$hosts{$ip}{NAME} = maskthis($ip, $class{$_}{NAME});
-			$hosts{$ip}{RESOLVED} = 'R';
-			removeclass($ip);
-			return 1;
+	if ($ip =~ /$ipmask/) {
+		for ("$1.$2.$3", "$1.$2", "$1") {
+			# if still resolving class, return
+			$class{$_}{RESOLVED} eq 'p' and return 1;
+			# class was resolved, return class name
+			if ($class{$_}{RESOLVED} ne 'F') {
+				$hosts{$ip}{NAME} = maskthis($ip, $class{$_}{NAME});
+				$hosts{$ip}{RESOLVED} = 'R';
+				removeclass($ip);
+				return 1;
+			}
+			# NOTE: The order of the classes is important. If we have a
+			#       class C resolved, no need to wait for the upper classes
 		}
-		# NOTE: The order of the classes is important. If we have a
-		#       class C resolved, no need to wait for the upper classes
 	}
 
 	# No luck, mark as failed
@@ -733,10 +737,11 @@ sub getlines {
 
 	while ($#lines < $opts{linecache} - 1 and $line = <FILE>) {
 		my @hosts;
-		while ($line =~ /$ipmask/g) {
-			push @hosts, "$1.$2.$3.$4";
-		    addhost("$1.$2.$3.$4");
+		while ($line =~ /($ipv4mask|$ipv6mask)/g) {
+			push @hosts, "$1";
+		    addhost("$1");
 		}
+
 		$stats{TOTLINES}++; 
 		push @lines, { TEXT => $line, HOSTS => \@hosts };
 	}
@@ -754,7 +759,7 @@ sub makequeries {
 		my $query = $q[0];
 		!$query and last;
 		my $ok = 0;
-		if ($query =~ /$ipmask/) {
+		if ($query =~ /($ipv4mask|$ipv6mask)/) {
 			$ok = query($query, 'H');
 		} elsif (exists $class{$query}) {
 			$ok = query($query, 'C');
@@ -1003,7 +1008,7 @@ sub query {
 
 	my ($find, $type) = @_;
 
-	my $send = ($type eq 'H') ? $find : (join('.', reverse(split(/\./, $find))) . '.in-addr.arpa');
+	my $send = ($type eq 'H') ? $find : ((new Net::IP($find))->reverse_ip());
 
 	# Send a query of format PTR for hosts or NS for classes
 	my $sock = $res->bgsend($send, ($type eq 'H') ? 'PTR' : 'NS');
