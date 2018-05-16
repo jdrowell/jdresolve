@@ -861,8 +861,8 @@ sub checkresponse {
 			for ($packet->answer) {
 				# For each DNS answer, check the data received
 				if ($type eq 'H') {
-					if (defined $_->{ptrdname}) {
-						$hosts{$query}{NAME} = $_->{ptrdname};
+					if (defined $_->ptrdname) {
+						$hosts{$query}{NAME} = $_->ptrdname;
 						$hosts{$query}{RESOLVED} = 'N';
 
 						$resolved = 1;
