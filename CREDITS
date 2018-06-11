@@ -1,4 +1,3 @@
-
    I'd like to thank the following people who have helped me during the
    development process of jdresolve. The list is ordered chronologically.
      * Michael Fuhr
@@ -58,13 +57,13 @@
           + [test] warnings with ActiveState Perl 5.6.0.613
      * [13]James H. Thompson
           + [patch] A fix for the "oops" assertion bug, new
-            "--processstatus" option (not merged, I went with the
-            existing "--debug" option and a new "--progress" option)
+            "--processstatus" option (not merged, I went with the existing
+            "--debug" option and a new "--progress" option)
      * [14]Dennis Boone
           + [sugg] Search the full Perl @INC path for Net::DNS
-       
+
    [test] = testing [sugg] = suggestion [patch] = patch
-   
+
    Note: I didn't keep track of some email addresses, if you'd like to
    have your email updated please let me know
 

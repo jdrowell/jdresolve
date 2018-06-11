@@ -89,10 +89,10 @@ echo "creating Makefile"
 
 cp Makefile.in Makefile
 
-echo "creating jdresolve"
+#echo "creating jdresolve"
 
-sed -e "s|^#\!/usr/bin/perl|#\!$PERL|" < jdresolve.in > jdresolve
-chmod 755 jdresolve
+#sed -e "s|^#\!/usr/bin/perl|#\!$PERL|" < jdresolve.in > jdresolve
+#chmod 755 jdresolve
 
 echo ""
 
