@@ -1,5 +1,5 @@
 %define name    jdresolve
-%define	version	0.6.1
+%define	version	0.6.2
 %define release 1
 %define prefix  /usr
 
@@ -11,8 +11,8 @@ Release: %{release}
 
 Copyright: GPL
 Group: Development/Languages
-Source: http://www.jdrowell.com/files/%{name}-%{version}.tar.gz
-Url: http://www.jdrowell.com/Linux/Projects/jdresolve
+Source: https://github.com/jdrowell/jdresolve
+Url: https://github.com/jdrowell/jdresolve
 Packager: John D. Rowell <me@jdrowell.com>
 
 BuildRoot: /var/tmp/%{name}-%{version}-%{release}-buildroot

@@ -3,7 +3,7 @@ INSTALL=/usr/bin/install
 BINDIR=$(prefix)/bin
 MANDIR=$(prefix)/man/man1
 
-none: 
+none:
 
 man:
 	pod2man jdresolve > jdresolve.1
