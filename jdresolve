@@ -60,7 +60,7 @@ debug mode - no file output, just statistics during run (verbosity level range: 
 
 timeout in seconds for each host resolution (default is 30 seconds)
 
-=item B<-l, --line-cache=<lines>>
+=item B<-l, --linecache=<lines>>
 
 numbers of lines to cache in memory (default is 10000)
 
@@ -141,6 +141,8 @@ use IO::Select;
 use Getopt::Long;
 use POSIX qw(strftime);
 use DB_File;
+use Regexp::Common qw(net);
+use Net::IP;
 #use GDBM_File;
 
 # Global constants
@@ -304,8 +306,10 @@ $opts{debug} and $| = 1;
 my $filename = $opts{stdin} ? '-' : $ARGV[0];
 
 # Set our IP matching regexp depending on the command line options
-my $ipmask = '([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])';
-my $lineipmask = $opts{anywhere} ? " $ipmask " : "^$ipmask ";
+my $fixedipmask = '([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])';
+my $ipmask = $opts{anywhere} ? " $fixedipmask " : "^$fixedipmask ";
+my $ipv4mask = $opts{anywhere} ? $RE{net}{IPv4}{-keep} : '^'.$RE{net}{IPv4}{-keep};
+my $ipv6mask = $opts{anywhere} ? $RE{net}{IPv6}{-keep} : '^'.$RE{net}{IPv6}{-keep};
 
 my $res = new Net::DNS::Resolver; # used for sending dns requests
 my $sel = new IO::Select; # controls the open sockets
@@ -432,12 +436,12 @@ sub unresolved {
   my %ips;
 
   while (<FILE>) {
-      !/$ipmask\s/ and next;
-      my $ip = "$1.$2.$3.$4";
-      exists $ips{$ip} and next;
+    !/($ipv4mask|$ipv6mask)\s/ and next;
+    my $ip = "$1";
+    exists $ips{$ip} and next;
 
-      $ips{$ip} = 1;
-      print "$ip\n";
+    $ips{$ip} = 1;
+    print "$ip\n";
   }
 
   return 1;
@@ -697,11 +701,11 @@ sub getlines {
 
   while ($#lines < $opts{linecache} - 1 and $line = <FILE>) {
     my @hosts;
-    while ($line =~ /$lineipmask/g) {
-      push @hosts, "$1.$2.$3.$4";
-      addhost("$1.$2.$3.$4");
+    while ($line =~ /($ipv4mask|$ipv6mask)/g) {
+      push @hosts, "$1";
+      addhost("$1");
     }
-    $stats{TOTLINES}++;
+    $stats{TOTLINES}++; 
     push @lines, { TEXT => $line, HOSTS => \@hosts };
   }
 
@@ -718,7 +722,7 @@ sub makequeries {
     my $query = $q[0];
     !$query and last;
     my $ok = 0;
-    if ($query =~ /$ipmask/) {
+    if ($query =~ /($ipv4mask|$ipv6mask)/) {
       $ok = query($query, 'H');
     } elsif (exists $class{$query}) {
       $ok = query($query, 'C');
@@ -977,7 +981,7 @@ sub query {
 
   my ($find, $type) = @_;
 
-  my $send = ($type eq 'H') ? $find : (join('.', reverse(split(/\./, $find))) . '.in-addr.arpa');
+  my $send = ($type eq 'H') ? $find : ((new Net::IP($find))->reverse_ip());
 
   # Send a query of format PTR for hosts or NS for classes
   my $sock = $res->bgsend($send, ($type eq 'H') ? 'PTR' : 'NS');
