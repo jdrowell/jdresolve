@@ -860,6 +860,7 @@ sub checkresponse {
 						if ($_->isa('Net::DNS::RR::PTR')) { 
 							# Fix for a new version of Net::DNS 
 							$hosts{$query}{NAME} = $_->rdatastr();
+              $hosts{$query}{NAME} =~ s/\.$//;
 						} else {
 						$hosts{$query}{NAME} = $_->{ptrdname};
 						}
