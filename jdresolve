@@ -305,7 +305,7 @@ my $filename = $opts{stdin} ? '-' : $ARGV[0];
 
 # Set our IP matching regexp depending on the command line options
 my $ipmask = '([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])\.([01]?\d\d?|2[0-4]\d|25[0-5])';
-my $lineipmask = $opts{anywhere} ? " $ipmask " : "^$ipmask ";
+my $lineipmask = $opts{anywhere} ? "$ipmask" : "^${ipmask}[^\\d]";
 
 my $res = new Net::DNS::Resolver; # used for sending dns requests
 my $sel = new IO::Select; # controls the open sockets
